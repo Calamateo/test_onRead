@@ -111,4 +111,29 @@ describe('readFile', () => {
 
         await expect(promise).resolves.toBe('');
     });
+
+    it('should resolve with file content when a valid text file is provided', () => {
+        const file = new Blob(['Hello, world!'], { type: 'text/plain' });
+
+        // Mocking FileReader
+        class MockFileReader {
+            constructor() {
+                this.result = null;
+                this.error = null;
+                this.onload = null;
+                this.onerror = null;
+            }
+
+            readAsText() {
+                this.result = 'Hello, world!';
+                this.onload({ target: { result: this.result } });
+            }
+        }
+
+        global.FileReader = MockFileReader;
+
+        return readFile(file).then(content => {
+            expect(content).toBe('Hello, world!');
+        });
+    });
 });
