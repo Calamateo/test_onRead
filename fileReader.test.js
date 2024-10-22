@@ -1,4 +1,5 @@
 const readFile = require('./fileReader');
+const { Blob } = require('blob-polyfill');
 
 describe('readFile', () => {
     let mockFileReader;
