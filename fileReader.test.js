@@ -136,4 +136,16 @@ describe('readFile', () => {
             expect(content).toBe('Hello, world!');
         });
     });
+
+    it('should resolve with an empty string when the file is empty', () => {
+        const file = new Blob([], { type: 'text/plain' });
+        global.FileReader = class FileReader {
+            readAsText() {
+                this.onload({ target: { result: '' } });
+            }
+        };
+        return readFile(file).then(content => {
+            expect(content).toBe('');
+        });
+    });
 });
