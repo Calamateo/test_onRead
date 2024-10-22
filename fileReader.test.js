@@ -1,151 +1,72 @@
-const readFile = require('./fileReader');
 const { Blob } = require('blob-polyfill');
+const FileUploader = require('./fileReader');
 
-describe('readFile', () => {
-    let mockFileReader;
+describe('FileUploader', () => {
+    let fileUploader;
+    let mockDialog, mockTranslateService, mockDialogRef;
 
     beforeEach(() => {
-        // Mock del FileReader con las propiedades necesarias
-        mockFileReader = {
+        mockDialog = { openAlert: jest.fn() };
+        mockTranslateService = { instant: jest.fn((key, params) => key) };
+        mockDialogRef = { close: jest.fn() };
+        fileUploader = new FileUploader(mockDialog, mockTranslateService, mockDialogRef);
+    });
+
+    it('should initialize properties in the constructor', () => {
+        expect(fileUploader.isUploadFailed).toBe(false);
+        expect(fileUploader.uploadError).toBe('');
+        expect(fileUploader.fileContent).toEqual([]);
+        expect(fileUploader.totalRecords).toBe(0);
+        expect(fileUploader.progress).toBe(0);
+    });
+
+    it('should validate supported file type and extension', () => {
+        const mockFile = new Blob(['{}'], { type: 'application/json' });
+        mockFile.name = 'test.json';
+
+        const fileReader = {
             readAsText: jest.fn(),
             onload: null,
             onerror: null,
-            result: null,
-            EMPTY: 0,
-            LOADING: 1,
-            DONE: 2
+            result: null
         };
 
-        // Simula el constructor de FileReader
-        global.FileReader = jest.fn(() => mockFileReader);
+        global.FileReader = jest.fn(() => fileReader);
+
+        fileUploader.uploadFile(mockFile);
+
+        expect(fileReader.readAsText).toHaveBeenCalledWith(mockFile);
     });
 
-    it('should resolve with file content on load', async () => {
-        const mockFile = new Blob(['file content'], { type: 'text/plain' });
+    it('should reject unsupported file type and extension', () => {
+        const mockFile = new Blob(['{}'], { type: 'text/plain' });
+        mockFile.name = 'test.txt';
 
-        // Llamada a la función que estamos probando
-        const promise = readFile(mockFile);
+        fileUploader.uploadFile(mockFile);
 
-        // Simulamos el evento onload
-        mockFileReader.onload({ target: { result: 'file content' } });
-
-        await expect(promise).resolves.toBe('file content');
+        expect(mockDialog.openAlert).toHaveBeenCalled();
+        expect(mockDialogRef.close).toHaveBeenCalled();
     });
 
-    it('should reject with error on error', async () => {
-        const mockFile = new Blob(['file content'], { type: 'text/plain' });
+    it('should handle FileReader onload with valid JSON array', () => {
+        const mockFile = new Blob(['[{"id": 1, "name": "Test", "status": "active"}]'], { type: 'application/json' });
+        mockFile.name = 'test.json';
 
-        // Llamada a la función que estamos probando
-        const promise = readFile(mockFile);
-
-        // Simulamos el evento onerror
-        const mockError = new Error('error');
-        mockFileReader.onerror(mockError);
-
-        await expect(promise).rejects.toThrow('error');
-    });
-
-    it('should resolve with file content when file is large', async () => {
-        const mockFileReader = {
+        const fileReader = {
             readAsText: jest.fn(),
             onload: null,
             onerror: null,
-            result: null,
-            EMPTY: 0,
-            LOADING: 1,
-            DONE: 2
+            result: null
         };
 
-        global.FileReader = jest.fn(() => mockFileReader);
+        global.FileReader = jest.fn(() => fileReader);
 
-        const largeContent = 'a'.repeat(1024 * 1024); // 1MB de contenido
-        const mockFile = new Blob([largeContent], { type: 'text/plain' });
+        fileUploader.uploadFile(mockFile);
 
-        const promise = readFile(mockFile);
+        fileReader.result = '[{"id": 1, "name": "Test", "status": "active"}]';
+        fileReader.onload();
 
-        mockFileReader.onload({ target: { result: largeContent } });
-
-        await expect(promise).resolves.toBe(largeContent);
-    });
-
-    it('should resolve with file content when file is binary', async () => {
-        const mockFileReader = {
-            readAsText: jest.fn(),
-            onload: null,
-            onerror: null,
-            result: null,
-            EMPTY: 0,
-            LOADING: 1,
-            DONE: 2
-        };
-
-        global.FileReader = jest.fn(() => mockFileReader);
-
-        const mockFile = new Blob([new ArrayBuffer(10)], { type: 'application/octet-stream' });
-
-        const promise = readFile(mockFile);
-
-        mockFileReader.onload({ target: { result: 'binary content' } });
-
-        await expect(promise).resolves.toBe('binary content');
-    });
-
-    it('should resolve with empty string when file is empty', async () => {
-        const mockFileReader = {
-            readAsText: jest.fn(),
-            onload: null,
-            onerror: null,
-            result: null,
-            EMPTY: 0,
-            LOADING: 1,
-            DONE: 2
-        };
-
-        global.FileReader = jest.fn(() => mockFileReader);
-
-        const mockFile = new Blob([''], { type: 'text/plain' });
-
-        const promise = readFile(mockFile);
-
-        mockFileReader.onload({ target: { result: '' } });
-
-        await expect(promise).resolves.toBe('');
-    });
-
-    it('should resolve with file content when a valid text file is provided', () => {
-        const file = new Blob(['Hello, world!'], { type: 'text/plain' });
-
-        // Mocking FileReader
-        class MockFileReader {
-            constructor() {
-                this.result = null;
-                this.error = null;
-                this.onload = null;
-                this.onerror = null;
-            }
-
-            readAsText() {
-                this.result = 'Hello, world!';
-                this.onload({ target: { result: this.result } });
-            }
-        }
-
-        global.FileReader = MockFileReader;
-
-        return readFile(file).then(content => {
-            expect(content).toBe('Hello, world!');
-        });
-    });
-
-    it('should resolve with an empty string when the file is empty', () => {
-        const file = new Blob([], { type: 'text/plain' });
-        global.FileReader = class FileReader {
-            readAsText() {
-                this.onload({ target: { result: '' } });
-            }
-        };
-        return readFile(file).then(content => {
-            expect(content).toBe('');
-        });
+        expect(fileUploader.fileContent).toEqual([{ id: 1, name: 'Test', status: 'active' }]);
+        expect(fileUploader.totalRecords).toBe(1);
     });
 });
